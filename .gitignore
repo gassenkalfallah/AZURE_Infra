@@ -1,0 +1,6 @@
+.infracost
+.terraform.*
+.terraform
+terraform.*
+modules
+storage
