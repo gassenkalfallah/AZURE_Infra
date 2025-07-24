@@ -22,7 +22,6 @@ This project demonstrates the full setup of a **multi-cluster Azure Kubernetes e
 | Kubernetes       | AKS (Azure Kubernetes Service) |
 | IaC              | Terraform                      |
 | Backup/Restore   | Velero + Azure Blob Storage    |
-| CI/CD            | GitLab                         |
 | Scripting        | Bash, kubectl, Azure CLI       |
 
 ---
