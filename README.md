@@ -1,156 +1,123 @@
 
+# ☁️ AKS Multi-Cluster Backup & Restore with Velero – DevOps Project
 
-**Steps to deploy!**
+This project demonstrates the full setup of a **multi-cluster Azure Kubernetes environment** with **Velero-based backup and disaster recovery**. It includes automated provisioning of two AKS clusters using **Terraform**, and deploying stateful applications with persistent volumes, backups, and restore validation.
 
+---
 
-* Navigate to the Backup & Restore directory:
+## 📖 Project Scope
 
-* Create the Service Principal, representing Velero, to perform backups & restores:
+- 🔨 Provision **two AKS clusters** (`primary-aks1` and `aks-dr`) using Terraform modules
+- 🔁 Implement backup and disaster recovery with Velero and Azure Blob Storage
+- 📦 Deploy sample stateful applications (e.g., NGINX with PVCs)
+- 🔁 Validate end-to-end data recovery across clusters
+
+---
+
+## 🛠️ Tech Stack
+
+| Component        | Technology                     |
+|------------------|--------------------------------|
+| Cloud Provider   | Microsoft Azure                |
+| Kubernetes       | AKS (Azure Kubernetes Service) |
+| IaC              | Terraform                      |
+| Backup/Restore   | Velero + Azure Blob Storage    |
+| CI/CD            | GitLab                         |
+| Scripting        | Bash, kubectl, Azure CLI       |
+
+---
+
+## 🔧 Infrastructure Setup (Terraform)
+
+### 🟩 Step 1: Provision Primary Cluster
 
 ```bash
-az ad sp create-for-rbac --name sp-velero-aks1 --role Reader --scopes /subscriptions/{subscriptionId}
-```
-
-* Deploy the Terraform sample code:
-
-```bash
+cd terraform/primary-cluster/
 terraform init
 terraform plan
 terraform apply
 ```
 
+Creates:
+- AKS cluster `primary-aks1`
+- Node pool
+- Azure Storage Account for Velero backups
+- IAM roles & service principal for Velero access
 
+### 🟨 Step 2: Provision Disaster Recovery Cluster
 
-  - Connect to the Primary AKS Cluster (following the sample code as is): 
-  ```bash
-     az aks get-credentials --name primary-aks1 --overwrite-existing --resource-group primary-aks1
-  ```
-  
-   - Check that velero is installed and running correctly: 
-    ```bash
-    kubectl get pods -n velero
-    ```
-    
-    
+```bash
+cd terraform/dr-cluster/
+terraform init
+terraform plan
+terraform apply
+```
 
-* Deploy [sample stateful applications](./applications_samples/) in the primary cluster:
+Creates:
+- AKS cluster `aks-dr`
+- Identical storage backend (Velero backup container shared)
+- RBAC configuration for restore permissions
 
-   ```bash
-    kubectl apply -f ../applications_samples/
-  ```
+### 🛡️ Azure Service Principal for Velero
 
-   - Wait for the applications to be running
-    ```bash
-    kubectl get pods --all-namespaces -w
-    ```
-   - Create some data files (to test backups and restores):
-  ```bash
-  kubectl exec -it nginx-csi-disk-zrs -n csi-disk-zrs -- touch /mnt/azuredisk/some-data-file.txt
-  ```
-  ```bash
-  kubectl exec -it nginx-csi-disk-lrs -n csi-disk-lrs -- touch /mnt/azuredisk/some-data-file.txt
-  ```
-  ```bash
-  kubectl exec -it nginx-csi-file-zrs -n csi-file-zrs -- touch /mnt/azuredisk/some-data-file.txt
-  ```
-  ```bash
-  kubectl exec -it nginx-file-lrs -n file-lrs -- touch /mnt/azuredisk/some-data-file.txt
-  ```
-  ```bash
-  kubectl exec -it nginxstatefulset-0 -n diskstatefulset -- touch /mnt/azuredisk/some-data-file.txt
-  ```
+```bash
+az ad sp create-for-rbac --name sp-velero-aks1 --role Reader --scopes /subscriptions/{subscriptionId}
+```
 
+---
 
+## 🚀 Application Deployment & Backup Workflow
 
-    
-  
+### 🔁 Connect to Primary Cluster
 
-     - Check that data is created :
-  ```bash
-  kubectl exec -it nginx-csi-disk-zrs -n csi-disk-zrs -- ls /mnt/azuredisk/some-data-file.txt
-  ```
-  ```bash
-  kubectl exec -it nginx-csi-disk-lrs -n csi-disk-lrs -- ls /mnt/azuredisk/some-data-file.txt
-  ```
-  ```bash
-  kubectl exec -it nginx-csi-file-zrs -n csi-file-zrs -- ls /mnt/azuredisk/some-data-file.txt
-  ```
-  ```bash
-  kubectl exec -it nginx-file-lrs -n file-lrs -- ls /mnt/azuredisk/some-data-file.txt
-  ```
-  ```bash
-  kubectl exec -it nginxstatefulset-0 -n diskstatefulset -- ls /mnt/azuredisk/some-data-file.txt
-  ```
+```bash
+az aks get-credentials --name primary-aks1 --resource-group primary-aks1
+kubectl get pods -n velero
+```
 
-* Create a backup for primary AKS cluster: (You can [filter resources to backup](https://velero.io/docs/v1.8/resource-filtering/))
+### 📦 Deploy Stateful Applications
 
-   ```bash
-  velero backup create manual-backup1  -w
-    ```
-  ![Create backup](./media/create_backup.png)
+```bash
+kubectl apply -f ../applications_samples/
+```
 
-* Describe created backup:
+### 📁 Create Sample Data
 
-   ```bash
-  velero backup describe manual-backup1 --details
-    ```
-     ![Describe backup](./media/describe_backup.png)
+```bash
+kubectl exec -it <pod-name> -- touch /mnt/azuredisk/some-data-file.txt
+```
 
-* Restore to secondary AKS cluster:
-  - Connect to the Secondary / Backup AKS Cluster (following the sample code as is): 
-    ```bash
-    az aks get-credentials --name aks-dr --overwrite-existing --resource-group aks-dr
-    ```
+### 💾 Create a Backup
 
-  - Check running pods :
-    ```bash
-    kubectl get pods --all-namespaces
-    ```
+```bash
+velero backup create manual-backup1 -w
+```
 
-  - As Velero is configured, in the secondary backup cluster, to reference the same backup location (storage account container), You should see the same backups available :
-    ```bash
-    velero backup get
-    ```
-     ![Velero check install screenshot](./media/list_backups.png)
-  
-  - Restore from backup : (you may get a partially failed status when trying to restore existing objects, such as kube-system resources). 
-    ```bash
-    velero restore create restore1 --from-backup manual-backup1 -w
-    ```
-     ![Create Restore](./media/create_restore.png)
+### 🔄 Restore to DR Cluster
 
-* Check that Restore is successful:
-  - Check restored applications / pods
-    ```bash
-    kubectl get pods --all-namespaces
-    ```
-  - check restore details 
-    ```bash
-    velero restore get restore1
-    ```
-     ```bash
-    velero restore describe restore1 --details
-    ```
-  
-   - check restore logs 
-        ```bash
-        velero restore logs restore1
-        ```
-  
-   - Check that data is restored (verify existence of data files):
-  ```bash
-  kubectl exec -it nginx-csi-disk-zrs -n csi-disk-zrs -- ls /mnt/azuredisk/some-data-file.txt
-  ```
-  ```bash
-  kubectl exec -it nginx-csi-disk-lrs -n csi-disk-lrs -- ls /mnt/azuredisk/some-data-file.txt
-  ```
-  ```bash
-  kubectl exec -it nginx-csi-file-zrs -n csi-file-zrs -- ls /mnt/azuredisk/some-data-file.txt
-  ```
-  ```bash
-  kubectl exec -it nginx-file-lrs -n file-lrs -- ls /mnt/azuredisk/some-data-file.txt
-  ```
-  ```bash
-  kubectl exec -it nginxstatefulset-0 -n diskstatefulset -- ls /mnt/azuredisk/some-data-file.txt
-  ```
- 
+```bash
+az aks get-credentials --name aks-dr --resource-group aks-dr
+velero restore create restore1 --from-backup manual-backup1 -w
+```
+
+---
+
+## ✅ Results
+
+- Full infrastructure provisioning automated via Terraform
+- Cluster-to-cluster disaster recovery validated
+- PVC-based applications restored with preserved data
+
+---
+
+## 🙋 Author
+
+**Ghassen Khalfallah**  
+DevOps & Cloud Automation Engineer  
+[Portfolio](https://gassenkalfallah.github.io/portfolio) | [GitHub](https://github.com/GassenKalfallah) | [LinkedIn](https://www.linkedin.com/in/ghassenkhalfallah)
+
+---
+
+## 📝 Note
+
+This project is sanitized for educational purposes. Secrets and credentials are not included.

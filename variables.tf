@@ -93,7 +93,7 @@ variable "velero_chart_version" {
 variable "velero_chart_repository" {
   description = "URL of the Helm chart repository"
   type        = string
-  default     = "https://vmware-tanzu.github.io/helm-charts"
+  default     = "***************************"
 }
 
 
